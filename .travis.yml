@@ -6,5 +6,5 @@ before_script:
  - "export JAVA_OPTS=-Xmx1024m"
  - "echo $JAVA_OPTS"
  - "ulimit -a"
- - "ulimit -s 128"
+ - "ulimit -u 2048"
  - "ulimit -a"
