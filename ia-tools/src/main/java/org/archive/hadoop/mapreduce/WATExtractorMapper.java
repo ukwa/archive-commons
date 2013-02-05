@@ -2,7 +2,7 @@ package org.archive.hadoop.mapreduce;
 
 import java.io.FileNotFoundException;
 import java.io.IOException;
-import java.net.URL;
+import java.net.URI;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -61,7 +61,7 @@ public class WATExtractorMapper extends
 		String url = valueS;
 		int idx = valueS.indexOf(' ');
 		if(idx == -1) {
-			URL tmpUrl = new URL(valueS);
+			URI tmpUrl = URI.create(valueS);
 			name = tmpUrl.getPath();
 			if(name.contains("/")) {
 				name = name.substring(name.lastIndexOf('/')+1);
