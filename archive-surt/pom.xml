@@ -3,12 +3,11 @@
   <modelVersion>4.0.0</modelVersion>
 
   <parent>
-    <groupId>org.archive</groupId>
+    <groupId>org.netpreserve.archive-commons</groupId>
     <artifactId>archive-commons-parent</artifactId>
     <version>1.0-SNAPSHOT</version>
   </parent>
 
-  <groupId>org.archive</groupId>
   <artifactId>archive-surt</artifactId>
   <version>1.0-SNAPSHOT</version>
   <packaging>jar</packaging>
@@ -74,6 +73,7 @@
       </plugin>
     </plugins>
   </build>
+<!--
   <repositories>
     <repository>
       <id>internetarchive</id>
@@ -93,4 +93,5 @@
       </snapshots>
     </repository>
   </repositories>
+-->
 </project>
