@@ -145,6 +145,7 @@
           </descriptorRefs>
           <finalName>archive-commons</finalName>
         </configuration>
+<!--
         <executions>
           <execution>
             <phase>package</phase>
@@ -153,6 +154,7 @@
             </goals>
           </execution>
         </executions>
+-->
       </plugin>
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>

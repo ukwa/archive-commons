@@ -66,6 +66,7 @@
             </manifest>
           </archive>
         </configuration>
+<!--
         <executions>
           <execution>
             <phase>package</phase>
@@ -74,6 +75,7 @@
             </goals>
           </execution>
         </executions>
+-->
       </plugin>
     </plugins>
   </build>
