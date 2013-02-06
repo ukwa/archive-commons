@@ -1,6 +1,7 @@
 package org.archive.format.gzip.zipnum;
 
 import java.io.IOException;
+import java.util.logging.Level;
 import java.util.logging.Logger;
 
 import org.archive.util.binsearch.SeekableLineReader;
@@ -175,8 +176,13 @@ public class SummaryBlockIterator extends AbstractPeekableIterator<SeekableLineR
 			} while (((maxAggregateBlocks <= 0) || (numBlocks < maxAggregateBlocks)) && 
 					  ((params.getMaxBlocks() <= 0) || (totalBlocks + numBlocks) < params.getMaxBlocks()) 
 					  && currLine.isContinuous(nextLine));
-				
+			
+			if (LOGGER.isLoggable(Level.INFO)) {
+				LOGGER.info("Loading " + numBlocks + " blocks - " + startOffset + ":" + totalLength + " from " + currPartId);
+			}
+			
 			currReader.seekWithMaxRead(startOffset, true, totalLength);
+			
 			totalBlocks += numBlocks;
 				
 		} catch (IOException io) {
@@ -203,12 +209,12 @@ public class SummaryBlockIterator extends AbstractPeekableIterator<SeekableLineR
 				currReader = null;
 			}
 			
-			if (cluster.locMap != null) {
+			if (cluster.locationUpdater != null) {
 				initLocationReader(partId);
 			}
 			
 			if (currReader == null) {
-				String partUrl = cluster.clusterUri + "/" + partId + ".gz";
+				String partUrl = cluster.getClusterPart(partId);
 				currReader = cluster.blockLoader.createBlockReader(partUrl);	
 			}
 			
@@ -221,7 +227,7 @@ public class SummaryBlockIterator extends AbstractPeekableIterator<SeekableLineR
 	
 	protected void initLocationReader(String partId)
 	{
-		String[] locations = cluster.locMap.get(partId);
+		String[] locations = cluster.locationUpdater.getLocations(partId);
 		
 		if (locations == null) {
 			LOGGER.severe("No locations for block(" + partId +")");
