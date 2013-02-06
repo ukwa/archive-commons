@@ -1,109 +1,57 @@
 package org.archive.format.gzip.zipnum;
 
 import java.io.IOException;
-import java.util.HashMap;
 import java.util.logging.Logger;
 
-import org.archive.format.cdx.CDXFile;
-import org.archive.format.gzip.zipnum.blockloader.BlockLoader;
+import org.archive.format.cdx.CDXInputSource;
 import org.archive.util.GeneralURIStreamFactory;
 import org.archive.util.binsearch.SeekableLineReader;
-import org.archive.util.binsearch.SeekableLineReaderFactory;
-import org.archive.util.binsearch.SeekableLineReaderIterator;
+import org.archive.util.binsearch.SortedTextFile;
 import org.archive.util.iterator.BoundedStringIterator;
 import org.archive.util.iterator.CloseableIterator;
 import org.archive.util.iterator.StartBoundedStringIterator;
 
-public class ZipNumCluster extends CDXFile {
+public class ZipNumCluster extends SortedTextFile implements CDXInputSource {
 	final static Logger LOGGER = Logger.getLogger(ZipNumCluster.class.getName());
 
-	protected String clusterUri;
+	private String clusterRoot;
 		
 	protected String summaryFile;
+	protected String locFile;
 	
-	protected BlockLoader blockLoader;
+	protected ZipNumBlockLoader blockLoader;
 	
-	protected HashMap<String, String[]> locMap = null;
+	//protected HashMap<String, String[]> locMap = null;
+	protected LocationUpdater locationUpdater = null;
 		
-	protected final static boolean USE_NIO = true;
+	protected final static boolean DEFAULT_USE_NIO = true;
 	
+	protected boolean useNio = DEFAULT_USE_NIO;
 	
-	public ZipNumCluster(String clusterUri) throws IOException
+	public ZipNumCluster()
 	{
-		this(clusterUri, "ALL.summary");
+		
 	}
 	
-	public ZipNumCluster(String clusterUri, String summaryFile, String locUri) throws IOException {
-		this(clusterUri, summaryFile);
-		
-		loadPartLocations(locUri);
-	}
-		
-	protected static SeekableLineReaderFactory getStreamFactoryUri(String clusterUri, String summaryFile) throws IOException
+	public ZipNumCluster(String summaryFile) throws IOException
 	{
-		String fullPath;
+		this.setSummaryFile(summaryFile);
+		init();
+	}
+					
+	public void init() throws IOException {
 		
-		if (summaryFile.startsWith("/")) {
-			fullPath = (summaryFile);
-		} else {
-			fullPath = (clusterUri + "/" + summaryFile);
+		super.setFactory(GeneralURIStreamFactory.createSeekableStreamFactory(summaryFile, useNio));
+				
+		if (locFile != null) {
+			this.locationUpdater = new LocationUpdater(locFile);
 		}
 		
-		return GeneralURIStreamFactory.createSeekableStreamFactory(fullPath, USE_NIO);
-	}
-	
-	public ZipNumCluster(String clusterUri, String summaryFile) throws IOException {
-		this(clusterUri, summaryFile, (BlockLoader)null);
-	}
-	
-	public ZipNumCluster(String clusterUri, String summaryFile, BlockLoader blockLoader) throws IOException {
-		
-		super(getStreamFactoryUri(clusterUri, summaryFile));
-		
-		this.clusterUri = clusterUri;
-		this.summaryFile = summaryFile;
-				
 		if (blockLoader == null) {
-			this.blockLoader = GeneralURIStreamFactory.createBlockLoader(clusterUri, USE_NIO);
-		} else {
-			this.blockLoader = blockLoader;
+			this.blockLoader = new ZipNumBlockLoader();
 		}
 	}
-		
-	protected void loadPartLocations(String locUri) throws IOException
-	{
-		locMap = new HashMap<String, String[]>();
-		SeekableLineReaderIterator lines = null;
-		SeekableLineReaderFactory readerFactory = null;
-		
-		try {
-			
-			readerFactory = GeneralURIStreamFactory.createSeekableStreamFactory(locUri, true);
-			
-			lines = new SeekableLineReaderIterator(readerFactory.get());
-			
-			while(lines.hasNext()) {
-				String line = lines.next();
-				String[] parts = line.split("\\s");
-				if (parts.length < 2) {
-					String msg = "Bad line(" + line +") in (" + locUri + ")";
-					throw new IOException(msg);
-				}
 				
-				String locations[] = new String[parts.length - 1];
-			
-				for (int i = 1; i < parts.length; i++) {
-					locations[i-1] = parts[i];
-				}
-				
-				locMap.put(parts[0], locations);
-			}
-		} finally {
-			lines.close();
-			readerFactory.close();
-		}
-	}
-		
 	protected static int extractLineCount(String line)
 	{
 		String[] parts = line.split("\t");
@@ -121,6 +69,16 @@ public class ZipNumCluster extends CDXFile {
 		}
 		
 		return count;
+	}
+	
+	public String getClusterPart(String partId)
+	{
+		if (clusterRoot == null) {
+			int lastSlash = summaryFile.lastIndexOf('/');
+			clusterRoot = this.summaryFile.substring(0, lastSlash + 1);
+		}
+		
+		return clusterRoot + partId + ".gz";
 	}
 	
 	public int getNumLines(String[] blocks)
@@ -280,12 +238,25 @@ public class ZipNumCluster extends CDXFile {
 	
 	public CloseableIterator<String> getLastBlockCDXLineIterator(String key) throws IOException {
 		// the next line after last key<space> is key! so this will return last key<space> block
-		return getCDXLineIterator(endKey(key), key);
+		CloseableIterator<String> summaryIter = super.getRecordIteratorLT(endKey(key));
+		
+		return wrapStartIterator(getCDXIterator(summaryIter), key);
+	}
+	
+	
+	//TODO: for CDXInputSource... this interface needs rethinking
+	public CloseableIterator<String> getCDXLineIterator(String key, String prefix) throws IOException
+	{
+		return getCDXIterator(key, prefix, false, null);
 	}
 			
 	public CloseableIterator<String> getCDXIterator(String key, String start, boolean exact, ZipNumParams params) throws IOException {
 		
 		CloseableIterator<String> summaryIter = super.getRecordIteratorLT(key);
+		
+		if (blockLoader.isBufferFully() && (params != null) && (params.getMaxBlocks() > 0)) {
+			summaryIter = new LineBufferingIterator(summaryIter, params.getMaxBlocks());
+		}
 		
 		if (exact) {
 			summaryIter = wrapEndIterator(summaryIter, endKey(start), false);
@@ -307,12 +278,36 @@ public class ZipNumCluster extends CDXFile {
 	{
 		return getCDXIterator(summaryIterator, null);
 	}
-		
-	public String getClusterUri() {
-		return clusterUri;
-	}
 	
+	public void setSummaryFile(String summaryFile) {
+		this.summaryFile = summaryFile;
+	}
+
 	public String getSummaryFile() {
 		return summaryFile;
+	}
+
+	public ZipNumBlockLoader getBlockLoader() {
+		return blockLoader;
+	}
+
+	public void setBlockLoader(ZipNumBlockLoader blockLoader) {
+		this.blockLoader = blockLoader;
+	}
+
+	public boolean isUseNio() {
+		return useNio;
+	}
+
+	public void setUseNio(boolean useNio) {
+		this.useNio = useNio;
+	}
+
+	public String getLocFile() {
+		return locFile;
+	}
+
+	public void setLocFile(String locFile) {
+		this.locFile = locFile;
 	}
 }

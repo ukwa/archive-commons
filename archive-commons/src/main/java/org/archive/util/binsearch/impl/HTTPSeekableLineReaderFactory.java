@@ -1,12 +1,13 @@
 package org.archive.util.binsearch.impl;
 
 import java.io.IOException;
+import java.text.SimpleDateFormat;
+import java.util.Date;
 
 import org.apache.commons.httpclient.HostConfiguration;
 import org.apache.commons.httpclient.HttpClient;
 import org.apache.commons.httpclient.MultiThreadedHttpConnectionManager;
 import org.apache.commons.httpclient.params.HttpClientParams;
-import org.archive.util.binsearch.SeekableLineReader;
 import org.archive.util.binsearch.SeekableLineReaderFactory;
 
 public class HTTPSeekableLineReaderFactory implements SeekableLineReaderFactory {
@@ -14,16 +15,19 @@ public class HTTPSeekableLineReaderFactory implements SeekableLineReaderFactory 
     private HostConfiguration hostConfiguration = null;
     private HttpClient http = null;
     private String uriString;
-    private boolean noKeepAlive = false;
-
+    
     public HTTPSeekableLineReaderFactory(String uriString) {
+    	this();
+    	this.uriString = uriString;
+    }
+
+    public HTTPSeekableLineReaderFactory() {
     	connectionManager = new MultiThreadedHttpConnectionManager();
     	hostConfiguration = new HostConfiguration();
 		HttpClientParams params = new HttpClientParams();
 //        params.setParameter(HttpClientParams.RETRY_HANDLER, new NoRetryHandler());
     	http = new HttpClient(params,connectionManager);
     	http.setHostConfiguration(hostConfiguration);
-    	this.uriString = uriString;
     }
     
     public void close() throws IOException
@@ -31,12 +35,12 @@ public class HTTPSeekableLineReaderFactory implements SeekableLineReaderFactory 
     	connectionManager.deleteClosedConnections();
     }
 
-	public SeekableLineReader get() throws IOException {
-		return new HTTPSeekableLineReader(http, uriString, noKeepAlive);
+	public HTTPSeekableLineReader get() throws IOException {
+		return new HTTPSeekableLineReader(http, uriString);
 	}
 	
 	public HTTPSeekableLineReader get(String url) throws IOException {
-		return new HTTPSeekableLineReader(http, url, noKeepAlive);
+		return new HTTPSeekableLineReader(http, url);
 	}
     /**
      * @param hostPort to proxy requests through - ex. "localhost:3128"
@@ -108,13 +112,31 @@ public class HTTPSeekableLineReaderFactory implements SeekableLineReaderFactory 
 	public void setSocketTimeoutMS(int socketTimeoutMS) {
     	connectionManager.getParams().setSoTimeout(socketTimeoutMS);
 	}
+	
+	// Experimental
+	public long getModTime()
+	{
+		HTTPSeekableLineReader reader = null;
+		SimpleDateFormat lastModFormat = new SimpleDateFormat("EEE, dd MMM yyyy HH:mm:ss zzz");
+	
+		try {
+			reader = get();
+			String result = reader.getHeader(HTTPSeekableLineReader.LAST_MODIFIED);
+			Date date = lastModFormat.parse(result);
+			return date.getTime();
+		
+		} catch (Exception e) {
+			e.printStackTrace();
+		} finally {
+			if (reader != null) {
+				try {
+					reader.close();
+				} catch (IOException e) {
 
-	public boolean isNoKeepAlive() {
-		return noKeepAlive;
+				}
+			}
+		}
+		
+		return 0;
 	}
-
-	public void setNoKeepAlive(boolean noKeepAlive) {
-		this.noKeepAlive = noKeepAlive;
-	}
-
 }
